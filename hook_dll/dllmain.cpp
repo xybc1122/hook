@@ -4,8 +4,8 @@
 
 DWORD WINAPI ThreadProc(LPVOID lpParamter)
 {
+		SetHookAppend();
 		SetHook();
-
 		return 0;
 }
 

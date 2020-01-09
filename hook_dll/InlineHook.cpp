@@ -1,17 +1,20 @@
 #include"InlineHook.h"
 #include "pch.h"
+#include<iostream>
 
 #define HOOK_ORIADDR  0x004A6F7C //钩子起始地址
-#define PATCH_LENGTH  8
+#define PATCH_LENGTH  8      
 DWORD dwHookAddr;
+DWORD dwRetAddr;
 BYTE  byCall[PATCH_LENGTH];
 BYTE  oldCall[PATCH_LENGTH];
-DWORD dwRetAddr;
 DWORD  dwOldProtect;
+
+DWORD  dwCallAddressVp = 0x004A6F58; //判断是否是这个地址调的call
 
 DWORD c = 0x004052BC;//内联汇编跳转的call 地址
 
-char  szNewCode[] = "7e321-00000-d41d8-00000";
+char  szNewCode[] = "ba855-00000-88aa6-00000";
 
 
 
@@ -22,19 +25,40 @@ void setCode() {
 
 
 }
+//瞬时钩子
+void _declspec (naked)  HookFunAppend() {
+	__asm {
+		//保存寄存器
+		pushad;
+		pushfd;
+		mov eax, dword ptr ss : [esp - 0x4];
+		cmp eax, dwCallAddressVp;
+		jnz Lable;
+		//做点啥
 
+		//恢复寄存器
+		popfd;
+		popad;
 
-
+	Lable:
+		popfd;
+		popad;
+	}
+}
 
 //钩子函数
 void _declspec (naked)  HookFunc() {
 	__asm {
 		//保存寄存器
+		pushad;
+		pushfd;
 		// 修改数据
 		lea eax, DWORD PTR DS:[szNewCode];
 		mov dword ptr ss : [ebp - 0x4] , eax;
 		//恢复寄存器
-		mov edx, dword ptr ss : [ebp - 0x4]
+		popfd;
+		popad;
+		mov edx, dword ptr ss : [ebp - 0x4] ;
 		call c;
 		jmp dwRetAddr;
 	}
@@ -51,9 +75,8 @@ void UnHook() {
 
 	//下钩函数
 	void  HookFun() {
-			//要hook的地址
 			dwHookAddr = HOOK_ORIADDR;
-			// //ret 返回的地址
+			//ret 返回的地址
 			dwRetAddr = dwHookAddr + PATCH_LENGTH;
 			//初始化地址
 			byCall[0] = { 0xE9 };
@@ -67,19 +90,27 @@ void UnHook() {
 			*(DWORD*)&byCall[1] = (DWORD)HookFunc - (DWORD)dwHookAddr - 5;
 
 			// 一般代码段是不可写的,我们需要把其改为可读可写.
-			VirtualProtect((LPVOID)HOOK_ORIADDR, PATCH_LENGTH, PAGE_EXECUTE_READWRITE, &dwOldProtect);
+			VirtualProtect((LPVOID)dwHookAddr, PATCH_LENGTH, PAGE_EXECUTE_READWRITE, &dwOldProtect);
+			
 			//保存原先字节
 			memcpy(oldCall, (void*)dwHookAddr, PATCH_LENGTH);
 
-			//替换原先字节
+			//替换原先字节  替换成 jmp e9 00000000
 			memcpy((void*)dwHookAddr, byCall, PATCH_LENGTH);
-			// 恢复钩子
-			//UnHook();
 	}	
-
-
+		
+	void  HookAppend() {
+	
+	
+	
+	}
+	//普通钩子
 	void SetHook() {
 
 		HookFun();
+	}
+	//瞬时钩子
+	void SetHookAppend() {
 
+		HookAppend();
 	}
